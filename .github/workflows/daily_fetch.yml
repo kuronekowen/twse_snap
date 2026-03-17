@@ -1,0 +1,51 @@
+name: TAIFEX Data to Release
+
+on:
+  schedule:
+    # 台灣時間 14:00 (UTC 06:00)
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  upload_data:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Run Downloader
+        run: python download_data.py
+
+      - name: Get Current Month and Date
+        id: info
+        run: |
+          echo "month=data-$(date +'%Y-%m')" >> $GITHUB_OUTPUT
+          echo "today=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        if: hashFiles('data/*.gz') != ''
+        with:
+          # 使用月份作為 Tag，實現「按月歸檔」
+          tag_name: ${{ steps.info.outputs.month }}
+          name: Market Data Archive - ${{ steps.info.outputs.month }}
+          body: "Daily update: ${{ steps.info.outputs.today }}\nContains Futures and Options Tick Data (Compressed)."
+          files: data/*.gz
+          # 設定為 true 以避免每次都覆蓋掉舊的 release 資訊
+          append_body: true 
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
