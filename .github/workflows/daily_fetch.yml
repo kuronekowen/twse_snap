@@ -2,9 +2,9 @@ name: TAIFEX Data to Release
 
 on:
   schedule:
-    # 台灣時間 14:00 (UTC 06:00)
-    - cron: '0 6 * * 1-5'
-  workflow_dispatch:
+    # 每天台灣時間 23:00 執行 (23:00 - 8 = UTC 15:00)
+    - cron: '0 15 * * *' 
+  workflow_dispatch: # 保留手動觸發按鈕，方便測試
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -30,22 +30,23 @@ jobs:
       - name: Run Downloader
         run: python download_data.py
 
-      - name: Get Current Month and Date
+      - name: Get Archive Info
         id: info
+        # 強制使用台灣時區來計算月份標籤，避免 UTC 導致跨日誤差
         run: |
+          export TZ="Asia/Taipei"
           echo "month=data-$(date +'%Y-%m')" >> $GITHUB_OUTPUT
           echo "today=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Upload to Release
+      - name: Upload to Monthly Release
         uses: softprops/action-gh-release@v2
         if: hashFiles('data/*.gz') != ''
         with:
-          # 使用月份作為 Tag，實現「按月歸檔」
+          # 這裡決定了歸檔邏輯：同一個月份會推送到同一個 Tag 下
           tag_name: ${{ steps.info.outputs.month }}
           name: Market Data Archive - ${{ steps.info.outputs.month }}
-          body: "Daily update: ${{ steps.info.outputs.today }}\nContains Futures and Options Tick Data (Compressed)."
+          body: "Last updated on ${{ steps.info.outputs.today }}. This release contains all tick data for the month."
           files: data/*.gz
-          # 設定為 true 以避免每次都覆蓋掉舊的 release 資訊
-          append_body: true 
+          append_body: false # 設為 false 則每次只顯示最後更新日期，不會讓描述變超長
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
